@@ -1,1 +1,967 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#09111f">
+  <title>AR Continents - Open House</title>
+  <style>
+    :root{
+      --bg:#07111f;
+      --panel:rgba(10,20,36,.78);
+      --line:rgba(255,255,255,.16);
+      --text:#f7fbff;
+      --muted:#a8b6c9;
+      --accent:#6ee7ff;
+      --ok:#65e6a5;
+      --warn:#ffd166;
+      --bad:#ff7b7b;
+      --piece-shadow:0 12px 25px rgba(0,0,0,.28);
+    }
 
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg)}
+    body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text)}
+
+    #app{
+      position:relative;width:100%;height:100dvh;overflow:hidden;
+      background:
+        radial-gradient(circle at 50% 10%,rgba(72,145,255,.17),transparent 38%),
+        linear-gradient(180deg,#091525 0%,#06101d 100%);
+    }
+
+    #camera{
+      position:absolute;inset:0;width:100%;height:100%;
+      object-fit:fill;transform:scaleX(-1);z-index:1;opacity:.22;
+      filter:saturate(.8) contrast(1.05);
+    }
+
+    #handCanvas{
+      position:absolute;inset:0;width:100%;height:100%;
+      z-index:5;pointer-events:none;
+    }
+
+    #playfield{
+      position:absolute;inset:0;z-index:4;
+      padding:
+        max(12px, env(safe-area-inset-top))
+        max(12px, env(safe-area-inset-right))
+        max(12px, env(safe-area-inset-bottom))
+        max(12px, env(safe-area-inset-left));
+      display:grid;
+      grid-template-rows:auto 1fr auto;
+      gap:10px;
+    }
+
+    .topbar{
+      display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+      gap:8px;
+    }
+
+    .brand{
+      font-weight:900;letter-spacing:.3px;font-size:clamp(16px,3vw,26px);
+      text-shadow:0 2px 15px rgba(0,0,0,.5);
+    }
+
+    .status{
+      justify-self:center;
+      min-width:190px;
+      padding:8px 14px;border:1px solid var(--line);
+      background:var(--panel);backdrop-filter:blur(16px);
+      border-radius:999px;text-align:center;font-weight:800;
+      font-size:clamp(12px,2vw,16px);
+    }
+
+    .stats{
+      justify-self:end;display:flex;gap:6px;
+    }
+
+    .stat{
+      background:var(--panel);border:1px solid var(--line);
+      border-radius:12px;padding:7px 10px;min-width:58px;text-align:center;
+    }
+    .stat b{display:block;font-size:17px}
+    .stat span{display:block;color:var(--muted);font-size:10px}
+
+    #board{
+      position:relative;min-height:0;border:1px solid var(--line);
+      border-radius:24px;overflow:hidden;
+      background:
+        linear-gradient(rgba(100,180,255,.025) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(100,180,255,.025) 1px,transparent 1px),
+        rgba(7,18,31,.50);
+      background-size:32px 32px;
+      box-shadow:inset 0 0 80px rgba(34,130,255,.06),0 18px 60px rgba(0,0,0,.25);
+    }
+
+    #boardTitle{
+      position:absolute;left:16px;top:12px;z-index:2;
+      padding:6px 10px;border-radius:10px;
+      background:rgba(5,13,24,.58);border:1px solid var(--line);
+      font-size:12px;color:#d9e5f2;pointer-events:none;
+    }
+
+    #worldGrid{
+      position:absolute;inset:0;width:100%;height:100%;opacity:.22;
+    }
+
+    .target{
+      position:absolute;z-index:2;transform:translate(-50%,-50%);
+      opacity:.34;pointer-events:none;
+    }
+    .target svg{width:100%;height:100%;display:block}
+    .target path{fill:rgba(255,255,255,.035);stroke:#a9c7df;stroke-width:2.5;stroke-dasharray:7 6}
+    .target.done{opacity:.18}
+    .targetLabel{
+      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      color:#dcecff;font-size:10px;font-weight:800;white-space:nowrap;
+      text-shadow:0 1px 8px #000;
+    }
+
+    #tray{
+      position:relative;height:clamp(96px,17dvh,155px);
+      border:1px solid var(--line);border-radius:22px;
+      background:rgba(8,17,30,.76);backdrop-filter:blur(14px);
+      overflow:hidden;
+    }
+
+    #trayTitle{
+      position:absolute;left:12px;top:8px;z-index:3;
+      font-size:11px;color:var(--muted);font-weight:800;letter-spacing:.4px;
+    }
+
+    .piece{
+      position:absolute;z-index:10;transform:translate(-50%,-50%);
+      width:clamp(60px,9vw,108px);
+      height:clamp(44px,7.2vw,78px);
+      cursor:grab;touch-action:none;user-select:none;
+      filter:drop-shadow(var(--piece-shadow));
+      transition:filter .15s ease,opacity .15s ease;
+    }
+    .piece svg{width:100%;height:100%;display:block;overflow:visible}
+    .piece path{
+      fill:var(--pieceColor);
+      stroke:rgba(255,255,255,.92);
+      stroke-width:2.5;
+      vector-effect:non-scaling-stroke;
+    }
+    .piece .pieceName{
+      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      font-size:10px;font-weight:900;color:#07111f;
+      white-space:nowrap;pointer-events:none;
+      text-shadow:0 1px 2px rgba(255,255,255,.45);
+    }
+    .piece.grabbed{
+      z-index:1000;filter:drop-shadow(0 22px 35px rgba(0,0,0,.48));
+    }
+    .piece.locked{
+      filter:drop-shadow(0 0 16px rgba(101,230,165,.48));
+      opacity:1;
+    }
+    .piece.wrong{animation:shake .25s ease}
+    @keyframes shake{
+      0%,100%{margin-left:0} 25%{margin-left:-8px}75%{margin-left:8px}
+    }
+
+    #message{
+      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      z-index:30;pointer-events:none;
+      padding:12px 16px;border-radius:14px;
+      background:rgba(5,12,22,.88);border:1px solid var(--line);
+      font-size:14px;font-weight:900;text-align:center;
+      opacity:0;transition:opacity .18s ease;
+      max-width:min(86vw,420px);
+    }
+    #message.show{opacity:1}
+
+    #startPanel{
+      position:absolute;inset:0;z-index:100;
+      display:grid;place-items:center;padding:22px;
+      background:rgba(3,8,15,.82);backdrop-filter:blur(16px);
+    }
+    .startCard{
+      width:min(560px,100%);padding:26px;border-radius:26px;
+      background:rgba(11,23,40,.95);border:1px solid var(--line);
+      text-align:center;box-shadow:0 25px 90px rgba(0,0,0,.45);
+    }
+    .startCard h1{font-size:clamp(26px,7vw,44px);margin:0 0 8px}
+    .startCard p{color:var(--muted);line-height:1.65;margin:8px 0 18px}
+    .primary{
+      border:0;border-radius:15px;min-height:54px;padding:0 24px;
+      background:#5fdfff;color:#04111b;font-weight:950;font-size:16px;
+      cursor:pointer;
+    }
+    .help{
+      margin-top:14px;padding:10px 12px;border-radius:13px;
+      background:rgba(255,255,255,.045);color:#c7d3e3;font-size:12px;line-height:1.6;
+    }
+
+    #finishPanel{
+      position:absolute;inset:0;z-index:110;display:none;place-items:center;
+      background:rgba(3,8,15,.78);backdrop-filter:blur(14px);padding:22px;
+    }
+    .finishCard{
+      width:min(500px,100%);padding:28px;border-radius:26px;
+      background:#0c1a2d;border:1px solid var(--line);text-align:center;
+    }
+    .finishCard h2{margin:0 0 8px;font-size:34px}
+    .scoreBig{font-size:56px;font-weight:1000;color:var(--accent);margin:6px 0}
+    .finishMeta{color:var(--muted);font-size:14px;margin-bottom:18px}
+    .secondary{
+      border:1px solid var(--line);background:transparent;color:#fff;
+      border-radius:14px;min-height:48px;padding:0 18px;font-weight:850;
+    }
+
+    #pinchCursor{
+      position:absolute;z-index:50;width:25px;height:25px;
+      border-radius:50%;border:2px solid #fff;
+      box-shadow:0 0 0 8px rgba(110,231,255,.18),0 0 24px rgba(110,231,255,.65);
+      transform:translate(-50%,-50%);display:none;pointer-events:none;
+    }
+    #pinchCursor.pinched{
+      width:32px;height:32px;border-color:var(--ok);
+      box-shadow:0 0 0 10px rgba(101,230,165,.18),0 0 28px rgba(101,230,165,.7);
+    }
+
+    #permissionHint{
+      display:none;color:var(--bad);font-weight:800;margin-top:10px;font-size:13px;
+    }
+
+    @media (max-width:700px){
+      #playfield{gap:7px}
+      .topbar{grid-template-columns:1fr auto;grid-template-areas:"brand stats" "status status"}
+      .brand{grid-area:brand}.stats{grid-area:stats}.status{grid-area:status;min-width:0;width:100%}
+      .stat{padding:6px 8px;min-width:50px}.stat b{font-size:15px}
+      #board{border-radius:18px}
+      #tray{height:108px;border-radius:18px}
+      .piece{width:72px;height:52px}
+    }
+  </style>
+</head>
+
+<body>
+<div id="app">
+  <video id="camera" autoplay playsinline muted></video>
+  <canvas id="handCanvas"></canvas>
+
+  <div id="playfield">
+    <header class="topbar">
+      <div class="brand">🌎 AR CONTINENTS</div>
+
+      <div id="status" class="status">กดเริ่มเกม แล้วอนุญาตกล้อง</div>
+
+      <div class="stats">
+        <div class="stat"><b id="score">0</b><span>คะแนน</span></div>
+        <div class="stat"><b id="moves">0</b><span>ครั้ง</span></div>
+        <div class="stat"><b id="timer">00:00</b><span>เวลา</span></div>
+      </div>
+    </header>
+
+    <section id="board">
+      <div id="boardTitle">หยิบทวีปจากด้านล่าง แล้วนำไปวางตำแหน่งที่ถูกต้อง</div>
+
+      <svg id="worldGrid" viewBox="0 0 1000 600" preserveAspectRatio="none">
+        <g fill="none" stroke="#86c7ff" stroke-width="1">
+          <ellipse cx="500" cy="300" rx="445" ry="250"/>
+          <ellipse cx="500" cy="300" rx="330" ry="250"/>
+          <ellipse cx="500" cy="300" rx="205" ry="250"/>
+          <path d="M55 300 H945"/>
+          <path d="M105 220 H895"/>
+          <path d="M105 380 H895"/>
+          <path d="M180 140 C300 240 300 360 180 460"/>
+          <path d="M820 140 C700 240 700 360 820 460"/>
+          <path d="M500 50 V550"/>
+        </g>
+      </svg>
+
+      <div id="targets"></div>
+      <div id="pieces"></div>
+      <div id="message"></div>
+    </section>
+
+    <section id="tray">
+      <div id="trayTitle">ทวีป</div>
+    </section>
+  </div>
+
+  <div id="pinchCursor"></div>
+
+  <div id="startPanel">
+    <div class="startCard">
+      <div style="font-size:54px">🫰🌏</div>
+      <h1>AR Continents</h1>
+      <p>
+        ใช้นิ้วโป้ง + นิ้วชี้ <b>จีบกัน</b> เพื่อหยิบทวีป<br>
+        เลื่อนมือไปยังตำแหน่งที่ถูกต้อง แล้ว <b>ปล่อยนิ้ว</b> เพื่อวาง
+      </p>
+      <button id="startBtn" class="primary">เริ่มเกม + เปิดกล้อง</button>
+      <div id="permissionHint">
+        เปิดกล้องไม่ได้ ตรวจสอบว่าใช้ HTTPS และกดอนุญาต Camera ในเบราว์เซอร์แล้ว
+      </div>
+      <div class="help">
+        เคล็ดลับ: ถือมือห่างกล้องประมาณ 40–80 ซม. และให้มีแสงพอ
+        ถ้าจะทดสอบโดยไม่ใช้กล้อง สามารถใช้เมาส์/นิ้วลากทวีปได้เช่นกัน
+      </div>
+    </div>
+  </div>
+
+  <div id="finishPanel">
+    <div class="finishCard">
+      <div style="font-size:48px">🎉</div>
+      <h2>ครบทุกทวีป!</h2>
+      <div id="finalScore" class="scoreBig">0</div>
+      <div id="finalMeta" class="finishMeta"></div>
+      <button id="restartBtn" class="secondary">เล่นอีกครั้ง</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import {
+    FilesetResolver,
+    HandLandmarker
+  } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+
+  // ----------------------------------------------------------
+  // CONFIG
+  // ----------------------------------------------------------
+
+  // ใส่ URL ของ Apps Script Web App ถ้าต้องการส่งคะแนนไป Google Sheets
+  // ตัวอย่าง: https://script.google.com/macros/s/XXXXXXXX/exec
+  const BACKEND_URL = "";
+
+  const MODEL_URL =
+    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+
+  // ตำแหน่ง "ศูนย์กลาง" ของทวีปบนพื้นที่ playfield (เปอร์เซ็นต์)
+  // ปรับค่าได้ตามดีไซน์แผนที่ที่ต้องการ
+  const TARGETS = {
+    "North America": {x: 20, y: 27, w: 12, h: 12},
+    "South America": {x: 31, y: 55, w: 10, h: 16},
+    "Europe":       {x: 48, y: 29, w: 10, h: 8},
+    "Africa":       {x: 49, y: 49, w: 11, h: 16},
+    "Asia":         {x: 67, y: 33, w: 20, h: 14},
+    "Oceania":      {x: 78, y: 60, w: 12, h: 9},
+    "Antarctica":   {x: 53, y: 70, w: 25, h: 8}
+  };
+
+  const PIECES = {
+    "North America": {
+      color:"#69c3ff",
+      path:"M8 31 L24 12 L48 8 L61 17 L81 14 L96 25 L92 40 L79 48 L70 65 L53 63 L43 77 L30 67 L18 62 L13 51 L5 44 Z"
+    },
+    "South America": {
+      color:"#7ee0a6",
+      path:"M57 5 L73 15 L70 32 L62 47 L60 63 L53 80 L46 101 L37 116 L28 112 L31 94 L25 80 L31 63 L29 46 L38 29 L46 14 Z"
+    },
+    "Europe": {
+      color:"#ffd166",
+      path:"M9 27 L20 11 L38 7 L49 13 L62 8 L74 16 L89 18 L82 30 L70 33 L62 42 L47 38 L37 45 L25 37 L13 39 Z"
+    },
+    "Africa": {
+      color:"#ff8fa3",
+      path:"M29 7 L52 11 L71 24 L74 43 L67 62 L62 81 L50 97 L37 115 L26 102 L20 82 L15 64 L17 46 L10 31 L19 17 Z"
+    },
+    "Asia": {
+      color:"#a68cff",
+      path:"M7 27 L18 13 L39 10 L58 5 L75 12 L95 10 L119 17 L137 11 L152 19 L171 16 L189 26 L176 37 L157 39 L146 47 L126 41 L113 54 L91 48 L76 59 L58 53 L43 46 L27 50 L17 41 Z"
+    },
+    "Oceania": {
+      color:"#70e0dc",
+      path:"M15 28 L26 17 L39 21 L48 30 L55 25 L64 33 L58 44 L47 50 L37 47 L29 54 L16 49 L10 40 Z M75 22 L80 18 L86 22 L83 29 Z M94 37 L99 34 L104 38 L101 45 Z"
+    },
+    "Antarctica": {
+      color:"#d6e7f5",
+      path:"M8 30 C27 15 47 23 63 18 C79 13 97 18 119 11 C142 4 160 17 188 11 L198 29 C182 42 160 39 141 46 C121 52 104 47 84 54 C62 61 45 51 25 57 L8 48 Z"
+    }
+  };
+
+  // ----------------------------------------------------------
+  // STATE
+  // ----------------------------------------------------------
+
+  const game = {
+    handLandmarker: null,
+    videoStream: null,
+    running: false,
+    lastVideoTime: -1,
+
+    pinching: false,
+    grabbed: null,
+    grabOffsetX: 0,
+    grabOffsetY: 0,
+
+    score: 0,
+    moves: 0,
+    startTime: 0,
+    timerId: null,
+    done: new Set()
+  };
+
+  const video = document.getElementById("camera");
+  const handCanvas = document.getElementById("handCanvas");
+  const handCtx = handCanvas.getContext("2d");
+
+  const playfield = document.getElementById("playfield");
+  const board = document.getElementById("board");
+  const piecesRoot = document.getElementById("pieces");
+  const targetsRoot = document.getElementById("targets");
+  const tray = document.getElementById("tray");
+
+  const statusEl = document.getElementById("status");
+  const scoreEl = document.getElementById("score");
+  const movesEl = document.getElementById("moves");
+  const timerEl = document.getElementById("timer");
+  const cursor = document.getElementById("pinchCursor");
+  const message = document.getElementById("message");
+
+  const startPanel = document.getElementById("startPanel");
+  const finishPanel = document.getElementById("finishPanel");
+  const permissionHint = document.getElementById("permissionHint");
+
+  // ----------------------------------------------------------
+  // UI / SVG
+  // ----------------------------------------------------------
+
+  function svgFor(continent, className="") {
+    const info = PIECES[continent];
+    return `
+      <svg viewBox="0 0 200 125" preserveAspectRatio="xMidYMid meet" class="${className}">
+        <path d="${info.path}" fill="${info.color}"></path>
+      </svg>
+    `;
+  }
+
+  function buildBoard() {
+    targetsRoot.innerHTML = "";
+    piecesRoot.innerHTML = "";
+    game.done.clear();
+
+    Object.keys(TARGETS).forEach((name) => {
+      const t = TARGETS[name];
+      const el = document.createElement("div");
+      el.className = "target";
+      el.dataset.continent = name;
+      el.style.left = `${t.x}%`;
+      el.style.top = `${t.y}%`;
+      el.style.width = `${t.w}%`;
+      el.style.height = `${t.h}%`;
+      el.innerHTML = `
+        ${svgFor(name)}
+        <div class="targetLabel">+</div>
+      `;
+      targetsRoot.appendChild(el);
+    });
+
+    const names = Object.keys(PIECES);
+
+    names.forEach((name, i) => {
+      const piece = document.createElement("div");
+      piece.className = "piece";
+      piece.dataset.continent = name;
+      piece.setAttribute("aria-label", name);
+      piece.style.setProperty("--pieceColor", PIECES[name].color);
+
+      // จัดชิ้นส่วนแบบกระจายอยู่ด้านล่าง
+      const trayPositions = [7, 21, 35, 50, 64, 79, 94];
+      piece.dataset.trayX = trayPositions[i];
+      piece.dataset.trayY = 62;
+      piece.style.left = `${trayPositions[i]}%`;
+      piece.style.top = `${trayPositions[i] === 50 ? 59 : 63}%`;
+
+      piece.innerHTML = `
+        ${svgFor(name)}
+        <div class="pieceName">${shortThai(name)}</div>
+      `;
+
+      piecesRoot.appendChild(piece);
+      enablePointerTest(piece);
+    });
+  }
+
+  function shortThai(name) {
+    const map = {
+      "North America":"อเมริกาเหนือ",
+      "South America":"อเมริกาใต้",
+      "Europe":"ยุโรป",
+      "Africa":"แอฟริกา",
+      "Asia":"เอเชีย",
+      "Oceania":"โอเชียเนีย",
+      "Antarctica":"แอนตาร์กติกา"
+    };
+    return map[name] || name;
+  }
+
+  function setStatus(text) {
+    statusEl.textContent = text;
+  }
+
+  function showMessage(text, kind="normal") {
+    message.textContent = text;
+    message.style.borderColor =
+      kind === "ok" ? "rgba(101,230,165,.65)" :
+      kind === "bad" ? "rgba(255,123,123,.65)" :
+      "rgba(255,255,255,.16)";
+    message.classList.add("show");
+    clearTimeout(showMessage._timer);
+    showMessage._timer = setTimeout(() => message.classList.remove("show"), 900);
+  }
+
+  function resizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    handCanvas.width = Math.round(window.innerWidth * dpr);
+    handCanvas.height = Math.round(window.innerHeight * dpr);
+    handCtx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+  // ----------------------------------------------------------
+  // POINTER FALLBACK
+  // ----------------------------------------------------------
+  // ใช้เมาส์/นิ้วลากเพื่อทดสอบเกม โดยไม่ต้องเปิดกล้อง
+
+  function enablePointerTest(piece) {
+    piece.addEventListener("pointerdown", (e) => {
+      if (piece.classList.contains("locked")) return;
+      e.preventDefault();
+
+      game.grabbed = piece;
+      piece.classList.add("grabbed");
+      piece.setPointerCapture?.(e.pointerId);
+
+      const pf = playfield.getBoundingClientRect();
+      const r = piece.getBoundingClientRect();
+
+      const centerX = r.left + r.width / 2;
+      const centerY = r.top + r.height / 2;
+
+      game.grabOffsetX = centerX - e.clientX;
+      game.grabOffsetY = centerY - e.clientY;
+
+      const move = (ev) => {
+        movePieceTo(
+          ev.clientX + game.grabOffsetX - pf.left,
+          ev.clientY + game.grabOffsetY - pf.top
+        );
+      };
+
+      const up = () => {
+        piece.removeEventListener("pointermove", move);
+        piece.removeEventListener("pointerup", up);
+        piece.removeEventListener("pointercancel", up);
+        releaseGrab();
+      };
+
+      piece.addEventListener("pointermove", move);
+      piece.addEventListener("pointerup", up);
+      piece.addEventListener("pointercancel", up);
+    });
+  }
+
+  // ----------------------------------------------------------
+  // GAME POSITIONING
+  // ----------------------------------------------------------
+
+  function movePieceTo(localCenterX, localCenterY) {
+    if (!game.grabbed) return;
+    const piece = game.grabbed;
+
+    const pf = playfield.getBoundingClientRect();
+
+    const minX = piece.offsetWidth / 2;
+    const minY = piece.offsetHeight / 2;
+
+    const maxX = pf.width - minX;
+    const maxY = pf.height - minY;
+
+    const x = Math.max(minX, Math.min(maxX, localCenterX));
+    const y = Math.max(minY, Math.min(maxY, localCenterY));
+
+    piece.style.left = `${x}px`;
+    piece.style.top = `${y}px`;
+  }
+
+  function getPieceUnder(x, y) {
+    const pieces = [...document.querySelectorAll(".piece:not(.locked)")];
+
+    // หาอันที่ใกล้เคอร์เซอร์ที่สุดก่อน
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const piece of pieces) {
+      const r = piece.getBoundingClientRect();
+      const inside =
+        x >= r.left && x <= r.right &&
+        y >= r.top && y <= r.bottom;
+
+      if (!inside) continue;
+
+      const cx = r.left + r.width/2;
+      const cy = r.top + r.height/2;
+      const d = Math.hypot(cx - x, cy - y);
+
+      if (d < bestDist) {
+        best = piece;
+        bestDist = d;
+      }
+    }
+
+    return best;
+  }
+
+  function beginGrab(piece, cursorX, cursorY) {
+    if (!piece || piece.classList.contains("locked")) return;
+
+    const pf = playfield.getBoundingClientRect();
+    const r = piece.getBoundingClientRect();
+
+    game.grabbed = piece;
+    piece.classList.add("grabbed");
+
+    game.grabOffsetX = (r.left + r.width/2) - cursorX;
+    game.grabOffsetY = (r.top + r.height/2) - cursorY;
+
+    game.moves++;
+    movesEl.textContent = game.moves;
+
+    setStatus(`กำลังถือ ${shortThai(piece.dataset.continent)} — เลื่อนไปวาง`);
+  }
+
+  function releaseGrab() {
+    const piece = game.grabbed;
+    if (!piece) return;
+
+    piece.classList.remove("grabbed");
+
+    const pf = playfield.getBoundingClientRect();
+    const r = piece.getBoundingClientRect();
+    const cx = r.left + r.width/2;
+    const cy = r.top + r.height/2;
+
+    const name = piece.dataset.continent;
+    const t = TARGETS[name];
+
+    const tx = pf.left + pf.width * (t.x / 100);
+    const ty = pf.top + pf.height * (t.y / 100);
+
+    const distance = Math.hypot(cx - tx, cy - ty);
+    const threshold = Math.max(38, Math.min(pf.width,pf.height) * 0.075);
+
+    if (distance <= threshold) {
+      piece.style.left = `${t.x}%`;
+      piece.style.top = `${t.y}%`;
+      piece.classList.add("locked");
+
+      const target = document.querySelector(`.target[data-continent="${CSS.escape(name)}"]`);
+      target?.classList.add("done");
+
+      game.done.add(name);
+
+      game.score += Math.max(80, 130 - Math.round(distance));
+      scoreEl.textContent = game.score;
+
+      showMessage(`✓ ${shortThai(name)} ถูกต้อง`, "ok");
+      setStatus(`ถูกต้อง! เหลืออีก ${Object.keys(PIECES).length - game.done.size} ทวีป`);
+
+      if (game.done.size === Object.keys(PIECES).length) {
+        finishGame();
+      }
+    } else {
+      piece.classList.add("wrong");
+      setTimeout(() => piece.classList.remove("wrong"), 280);
+
+      resetPieceToTray(piece);
+      showMessage("ยังไม่ตรงตำแหน่ง ลองใหม่", "bad");
+      setStatus("จีบนิ้วอีกครั้งเพื่อหยิบทวีป");
+    }
+
+    game.grabbed = null;
+  }
+
+  function resetPieceToTray(piece) {
+    const x = Number(piece.dataset.trayX);
+    const y = 63;
+    piece.style.left = `${x}%`;
+    piece.style.top = `${y}%`;
+  }
+
+  // ----------------------------------------------------------
+  // PINCH / HAND TRACKING
+  // ----------------------------------------------------------
+
+  function dist(a,b) {
+    return Math.hypot(a.x-b.x,a.y-b.y);
+  }
+
+  function isPinching(landmarks) {
+    const thumb = landmarks[4];
+    const index = landmarks[8];
+
+    // ใช้ขนาดฝ่ามือช่วย normalize ระยะ เพื่อให้ใช้ได้ใกล้/ไกลกล้อง
+    const palm = Math.max(
+      0.0001,
+      (dist(landmarks[5], landmarks[17]) + dist(landmarks[0], landmarks[9])) / 2
+    );
+
+    const ratio = dist(thumb,index) / palm;
+
+    // hysteresis ช่วยลดการสั่นระหว่างจีบ/ปล่อย
+    return game.pinching ? ratio < 0.43 : ratio < 0.30;
+  }
+
+  function normalizedHandToScreen(lm) {
+    // กล้องถูก mirror ด้วย scaleX(-1)
+    // ดังนั้นกลับ X อีกครั้งเพื่อให้การขยับมือไปทางซ้าย/ขวาเป็นธรรมชาติ
+    const nx = 1 - lm.x;
+    const ny = lm.y;
+
+    return {
+      x: nx * window.innerWidth,
+      y: ny * window.innerHeight
+    };
+  }
+
+  function drawHand(landmarks, cursorPoint, pinching) {
+    handCtx.clearRect(0,0,window.innerWidth,window.innerHeight);
+    if (!landmarks) return;
+
+    const connections = [
+      [0,1],[1,2],[2,3],[3,4],
+      [0,5],[5,6],[6,7],[7,8],
+      [5,9],[9,10],[10,11],[11,12],
+      [9,13],[13,14],[14,15],[15,16],
+      [13,17],[17,18],[18,19],[19,20],
+      [0,17]
+    ];
+
+    handCtx.lineWidth = 2;
+    handCtx.strokeStyle = pinching ? "#65e6a5" : "#6ee7ff";
+    handCtx.fillStyle = "#ffffff";
+
+    for (const [a,b] of connections) {
+      const p1 = normalizedHandToScreen(landmarks[a]);
+      const p2 = normalizedHandToScreen(landmarks[b]);
+      handCtx.beginPath();
+      handCtx.moveTo(p1.x,p1.y);
+      handCtx.lineTo(p2.x,p2.y);
+      handCtx.stroke();
+    }
+
+    for (const p of landmarks) {
+      const s = normalizedHandToScreen(p);
+      handCtx.beginPath();
+      handCtx.arc(s.x,s.y,3,0,Math.PI*2);
+      handCtx.fill();
+    }
+
+    if (cursorPoint) {
+      handCtx.beginPath();
+      handCtx.arc(cursorPoint.x,cursorPoint.y,pinching ? 15 : 10,0,Math.PI*2);
+      handCtx.strokeStyle = pinching ? "#65e6a5" : "#6ee7ff";
+      handCtx.lineWidth = 3;
+      handCtx.stroke();
+    }
+  }
+
+  function updatePinchInteraction(landmarks) {
+    const indexTip = landmarks[8];
+    const screen = normalizedHandToScreen(indexTip);
+
+    cursor.style.display = "block";
+    cursor.style.left = `${screen.x}px`;
+    cursor.style.top = `${screen.y}px`;
+    cursor.classList.toggle("pinched", game.pinching);
+
+    const nowPinching = isPinching(landmarks);
+
+    // เปลี่ยนจากไม่จีบ -> จีบ
+    if (!game.pinching && nowPinching) {
+      const piece = getPieceUnder(screen.x, screen.y);
+      if (piece) {
+        game.pinching = true;
+        beginGrab(piece, screen.x, screen.y);
+      }
+    }
+
+    // ขณะจีบอยู่
+    if (game.pinching && game.grabbed) {
+      movePieceTo(
+        screen.x + game.grabOffsetX - playfield.getBoundingClientRect().left,
+        screen.y + game.grabOffsetY - playfield.getBoundingClientRect().top
+      );
+    }
+
+    // จีบ -> ปล่อย
+    if (game.pinching && !nowPinching) {
+      game.pinching = false;
+      releaseGrab();
+    }
+
+    drawHand(landmarks, screen, game.pinching);
+  }
+
+  async function startCameraAndModel() {
+    permissionHint.style.display = "none";
+    setStatus("กำลังโหลดระบบตรวจจับมือ...");
+
+    // ขอ permission จากผู้ใช้ใน event click โดยตรง
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "user",
+        width: {ideal: 1280},
+        height:{ideal: 720}
+      },
+      audio:false
+    });
+
+    game.videoStream = stream;
+    video.srcObject = stream;
+
+    await new Promise(resolve => {
+      if (video.readyState >= 1) resolve();
+      else video.addEventListener("loadedmetadata", resolve, {once:true});
+    });
+
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+    );
+
+    game.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: MODEL_URL,
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 1,
+      minHandDetectionConfidence: 0.55,
+      minHandPresenceConfidence: 0.55,
+      minTrackingConfidence: 0.55
+    });
+
+    game.running = true;
+    setStatus("พร้อม! จีบนิ้วโป้ง + นิ้วชี้ เพื่อหยิบทวีป");
+    requestAnimationFrame(handLoop);
+  }
+
+  async function handLoop() {
+    if (!game.running || !game.handLandmarker) return;
+
+    if (video.readyState >= 2 && video.currentTime !== game.lastVideoTime) {
+      const now = performance.now();
+      const result = game.handLandmarker.detectForVideo(video, now);
+      game.lastVideoTime = video.currentTime;
+
+      if (result.landmarks?.length) {
+        updatePinchInteraction(result.landmarks[0]);
+      } else {
+        game.pinching = false;
+        cursor.style.display = "none";
+        handCtx.clearRect(0,0,window.innerWidth,window.innerHeight);
+
+        if (game.grabbed) {
+          releaseGrab();
+        }
+        setStatus("ไม่พบมือ — ยกมือให้อยู่ในกล้อง");
+      }
+    }
+
+    requestAnimationFrame(handLoop);
+  }
+
+  // ----------------------------------------------------------
+  // TIMER / FINISH
+  // ----------------------------------------------------------
+
+  function startTimer() {
+    game.startTime = Date.now();
+    clearInterval(game.timerId);
+
+    game.timerId = setInterval(() => {
+      const sec = Math.floor((Date.now() - game.startTime) / 1000);
+      timerEl.textContent =
+        String(Math.floor(sec/60)).padStart(2,"0") + ":" +
+        String(sec%60).padStart(2,"0");
+    }, 250);
+  }
+
+  function finishGame() {
+    clearInterval(game.timerId);
+
+    const timeSec = Math.floor((Date.now() - game.startTime) / 1000);
+    const total = Object.keys(PIECES).length;
+    const accuracy = game.moves ? (total / game.moves * 100) : 100;
+
+    document.getElementById("finalScore").textContent = game.score;
+    document.getElementById("finalMeta").textContent =
+      `เวลา ${timerEl.textContent} • หยิบ ${game.moves} ครั้ง • ความแม่นยำ ${accuracy.toFixed(0)}%`;
+
+    finishPanel.style.display = "grid";
+    setStatus("ครบทุกทวีปแล้ว!");
+    sendScore(timeSec, accuracy);
+  }
+
+  function resetGame() {
+    game.score = 0;
+    game.moves = 0;
+    game.done.clear();
+    game.pinching = false;
+    game.grabbed = null;
+
+    scoreEl.textContent = "0";
+    movesEl.textContent = "0";
+    timerEl.textContent = "00:00";
+
+    buildBoard();
+    finishPanel.style.display = "none";
+    startTimer();
+    setStatus("พร้อม! จีบนิ้วโป้ง + นิ้วชี้ เพื่อหยิบทวีป");
+  }
+
+  function sendScore(timeSec, accuracy) {
+    if (!BACKEND_URL) return;
+
+    try {
+      fetch(BACKEND_URL, {
+        method:"POST",
+        mode:"no-cors",
+        headers:{"Content-Type":"text/plain;charset=UTF-8"},
+        body:JSON.stringify({
+          score:game.score,
+          timeSec,
+          moves:game.moves,
+          accuracy:Number(accuracy.toFixed(1))
+        })
+      }).catch(()=>{});
+    } catch(e){}
+  }
+
+  // ----------------------------------------------------------
+  // EVENTS
+  // ----------------------------------------------------------
+
+  document.getElementById("startBtn").addEventListener("click", async () => {
+    try {
+      await startCameraAndModel();
+      startPanel.style.display = "none";
+      resetGame();
+    } catch (err) {
+      console.error(err);
+      permissionHint.style.display = "block";
+      setStatus("เปิดกล้องไม่สำเร็จ");
+    }
+  });
+
+  document.getElementById("restartBtn").addEventListener("click", () => {
+    resetGame();
+  });
+
+  // ----------------------------------------------------------
+  // INIT
+  // ----------------------------------------------------------
+
+  buildBoard();
+</script>
+</body>
+</html>
